@@ -57,7 +57,7 @@ def postulaciones_demo_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/predict-matriculado")
+@app.post("/predict")
 def predict_matriculado_endpoint(payload: PredictMatriculadoRequest):
     try:
         result = predict_matriculado(payload.model_dump())

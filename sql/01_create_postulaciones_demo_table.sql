@@ -1,0 +1,20 @@
+create table if not exists public.postulaciones_demo (
+	id bigserial primary key,
+	cedula bigint not null,
+	periodo integer not null,
+	sexo text not null,
+	preferencia integer not null,
+	carrera text not null,
+	matriculado text not null,
+	facultad text not null,
+	puntaje integer not null,
+	grupo_depen text not null,
+	region text not null,
+	latitud double precision,
+	longitud double precision,
+	ptje_nem integer,
+	psu_promlm integer,
+	pace text,
+	gratuidad text,
+	created_at timestamptz not null default now()
+);

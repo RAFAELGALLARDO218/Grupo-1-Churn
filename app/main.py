@@ -67,3 +67,5 @@ def predict_matriculado_endpoint(payload: PredictMatriculadoRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+

@@ -1,0 +1,26 @@
+
+CREATE TABLE IF NOT EXISTS public.churn_clientes (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    gender TEXT,
+    senior_citizen INTEGER,
+    partner TEXT,
+    dependents TEXT,
+    tenure INTEGER,
+    phone_service TEXT,
+    multiple_lines TEXT,
+    internet_service TEXT,
+    online_security TEXT,
+    online_backup TEXT,
+    device_protection TEXT,
+    tech_support TEXT,
+    streaming_tv TEXT,
+    streaming_movies TEXT,
+    contract TEXT,
+    paperless_billing TEXT,
+    payment_method TEXT,
+    monthly_charges NUMERIC,
+    total_charges NUMERIC,
+    churn INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

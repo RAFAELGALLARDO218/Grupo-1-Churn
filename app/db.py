@@ -1,10 +1,17 @@
+# app/db.py
+# ============================================================
+# CONEXIÓN Y CONSULTAS A BASE DE DATOS - CHURN
+# ============================================================
+
 from dotenv import load_dotenv
 import os
 import psycopg
+from psycopg.rows import dict_row
 
 load_dotenv()
 
 def get_connection_params():
+    """Obtiene los parámetros de conexión desde variables de entorno"""
     return {
         "host": os.getenv("SUPABASE_DB_HOST"),
         "port": os.getenv("SUPABASE_DB_PORT", "5432"),
@@ -15,6 +22,7 @@ def get_connection_params():
     }
 
 def test_connection():
+    """Prueba la conexión a la base de datos"""
     params = get_connection_params()
     missing = [k for k, v in params.items() if k != "sslmode" and not v]
     if missing:
@@ -29,35 +37,50 @@ def test_connection():
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
-def get_postulaciones(limit: int = 20):
+# ============================================================
+# CONSULTAS PARA CHURN
+# ============================================================
+
+def get_churn_data(limit: int = 20):
+    """
+    Obtiene registros de la tabla churn_clientes
+    
+    Parámetros:
+        limit: Número máximo de registros a retornar
+    """
     params = get_connection_params()
     missing = [k for k, v in params.items() if k != "sslmode" and not v]
     if missing:
         raise ValueError("Faltan variables: " + ", ".join(missing))
 
     query = '''
-    select
+    SELECT 
         id,
-        cedula,
-        periodo,
-        sexo,
-        preferencia,
-        carrera,
-        matriculado,
-        facultad,
-        puntaje,
-        grupo_depen,
-        region,
-        latitud,
-        longitud,
-        ptje_nem,
-        psu_promlm,
-        pace,
-        gratuidad,
+        customer_id,
+        gender,
+        senior_citizen,
+        partner,
+        dependents,
+        tenure,
+        phone_service,
+        multiple_lines,
+        internet_service,
+        online_security,
+        online_backup,
+        device_protection,
+        tech_support,
+        streaming_tv,
+        streaming_movies,
+        contract,
+        paperless_billing,
+        payment_method,
+        monthly_charges,
+        total_charges,
+        churn,
         created_at
-    from public.postulaciones_demo
-    order by id
-    limit %s;
+    FROM public.churn_clientes
+    ORDER BY id
+    LIMIT %s;
     '''
 
     with psycopg.connect(**params) as conn:
@@ -78,64 +101,116 @@ def get_postulaciones(limit: int = 20):
 
     return results
 
-def get_postulaciones_stats():
+def get_churn_statistics():
+    """
+    Calcula estadísticas básicas de churn_clientes
+    """
     params = get_connection_params()
     missing = [k for k, v in params.items() if k != "sslmode" and not v]
     if missing:
         raise ValueError("Faltan variables: " + ", ".join(missing))
 
+    # Resumen general
     summary_query = '''
-    select
-        count(*) as total_postulaciones,
-        round(avg(puntaje)::numeric, 2) as promedio_puntaje,
-        round(avg(ptje_nem)::numeric, 2) as promedio_ptje_nem,
-        round(avg(psu_promlm)::numeric, 2) as promedio_psu_promlm
-    from public.postulaciones_demo;
+    SELECT 
+        COUNT(*) as total_clientes,
+        SUM(churn) as clientes_churn,
+        ROUND(AVG(churn) * 100, 2) as tasa_churn_porcentaje,
+        ROUND(AVG(tenure), 2) as tenencia_promedio_meses,
+        ROUND(AVG(monthly_charges), 2) as cargo_mensual_promedio,
+        ROUND(AVG(total_charges), 2) as cargo_total_promedio
+    FROM public.churn_clientes;
     '''
 
-    sexo_query = '''
-    select sexo, count(*) as total
-    from public.postulaciones_demo
-    group by sexo
-    order by total desc, sexo;
+    # Churn por género
+    gender_query = '''
+    SELECT 
+        gender, 
+        COUNT(*) as total,
+        SUM(churn) as churn_count,
+        ROUND(AVG(churn) * 100, 2) as churn_rate
+    FROM public.churn_clientes
+    GROUP BY gender
+    ORDER BY churn_rate DESC;
     '''
 
-    region_query = '''
-    select region, count(*) as total
-    from public.postulaciones_demo
-    group by region
-    order by total desc, region
-    limit 10;
+    # Churn por tipo de contrato
+    contract_query = '''
+    SELECT 
+        contract, 
+        COUNT(*) as total,
+        SUM(churn) as churn_count,
+        ROUND(AVG(churn) * 100, 2) as churn_rate
+    FROM public.churn_clientes
+    GROUP BY contract
+    ORDER BY churn_rate DESC;
     '''
 
-    carrera_query = '''
-    select carrera, count(*) as total
-    from public.postulaciones_demo
-    group by carrera
-    order by total desc, carrera
-    limit 10;
+    # Churn por tipo de internet
+    internet_query = '''
+    SELECT 
+        internet_service, 
+        COUNT(*) as total,
+        SUM(churn) as churn_count,
+        ROUND(AVG(churn) * 100, 2) as churn_rate
+    FROM public.churn_clientes
+    GROUP BY internet_service
+    ORDER BY churn_rate DESC;
     '''
 
     with psycopg.connect(**params) as conn:
         with conn.cursor() as cur:
+            # Resumen general
             cur.execute(summary_query)
-            summary_row = cur.fetchone()
-
-            cur.execute(sexo_query)
-            sexo_rows = cur.fetchall()
-
-            cur.execute(region_query)
-            region_rows = cur.fetchall()
-
-            cur.execute(carrera_query)
-            carrera_rows = cur.fetchall()
+            summary = cur.fetchone()
+            
+            # Por género
+            cur.execute(gender_query)
+            gender_rows = cur.fetchall()
+            
+            # Por contrato
+            cur.execute(contract_query)
+            contract_rows = cur.fetchall()
+            
+            # Por internet
+            cur.execute(internet_query)
+            internet_rows = cur.fetchall()
 
     return {
-        "total_postulaciones": int(summary_row[0]) if summary_row[0] is not None else 0,
-        "promedio_puntaje": float(summary_row[1]) if summary_row[1] is not None else None,
-        "promedio_ptje_nem": float(summary_row[2]) if summary_row[2] is not None else None,
-        "promedio_psu_promlm": float(summary_row[3]) if summary_row[3] is not None else None,
-        "por_sexo": [{"sexo": row[0], "total": int(row[1])} for row in sexo_rows],
-        "top_regiones": [{"region": row[0], "total": int(row[1])} for row in region_rows],
-        "top_carreras": [{"carrera": row[0], "total": int(row[1])} for row in carrera_rows],
+        "resumen": {
+            "total_clientes": int(summary[0]) if summary[0] else 0,
+            "clientes_churn": int(summary[1]) if summary[1] else 0,
+            "clientes_no_churn": int(summary[0] - summary[1]) if summary[0] and summary[1] else 0,
+            "tasa_churn_porcentaje": float(summary[2]) if summary[2] else 0.0,
+            "tenencia_promedio_meses": float(summary[3]) if summary[3] else 0.0,
+            "cargo_mensual_promedio": float(summary[4]) if summary[4] else 0.0,
+            "cargo_total_promedio": float(summary[5]) if summary[5] else 0.0,
+        },
+        "por_genero": [
+            {
+                "genero": row[0], 
+                "total": int(row[1]),
+                "churn_count": int(row[2]),
+                "churn_rate": float(row[3])
+            } 
+            for row in gender_rows
+        ],
+        "por_contrato": [
+            {
+                "contrato": row[0], 
+                "total": int(row[1]),
+                "churn_count": int(row[2]),
+                "churn_rate": float(row[3])
+            } 
+            for row in contract_rows
+        ],
+        "por_internet": [
+            {
+                "internet_service": row[0], 
+                "total": int(row[1]),
+                "churn_count": int(row[2]),
+                "churn_rate": float(row[3])
+            } 
+            for row in internet_rows
+        ]
     }

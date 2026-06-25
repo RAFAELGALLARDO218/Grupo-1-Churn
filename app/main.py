@@ -53,7 +53,7 @@ def db_health():
     return test_connection()
 
 @app.get("/churn-clientes")
-def get_churn_clientes(limit: int = Query(default=20, ge=1, le=100)):
+def get_churn_clientes(limit: int = Query(default=20, ge=1, le=70000)):
     try:
         data = get_churn_data(limit=limit)
         return {

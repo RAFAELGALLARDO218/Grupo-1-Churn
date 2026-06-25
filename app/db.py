@@ -75,8 +75,7 @@ def get_churn_data(limit: int = 20):
         paymentmethod,
         monthlycharges,
         totalcharges,
-        churn,
-        created_at
+        churn
     FROM public.churn_clientes
     ORDER BY customerid
     LIMIT %s;

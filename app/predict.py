@@ -3,9 +3,10 @@ import joblib
 import pandas as pd
 import numpy as np
 
-MODEL_PATH = Path("artifacts/predictor_matricula_tree.joblib")
+# ========== RUTAS DE MODELOS ==========
+MODEL_CHURN_PATH = Path("artifacts/predictor_churn_tree.joblib")  # Modelo de churn
 
-# ========== VARIABLES DE TELCO ==========
+# ========== COLUMNAS DEL DATASET ==========
 FEATURE_COLUMNS = [
     "customerid",
     "gender",
@@ -31,9 +32,9 @@ FEATURE_COLUMNS = [
 
 def load_model():
     """Carga el modelo guardado"""
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"No existe el modelo en: {MODEL_PATH}")
-    return joblib.load(MODEL_PATH)
+    if not MODEL_CHURN_PATH.exists():
+        raise FileNotFoundError(f"No existe el modelo en: {MODEL_CHURN_PATH}")
+    return joblib.load(MODEL_CHURN_PATH)
 
 def encode_features_for_model(features):
     """
@@ -73,9 +74,9 @@ def encode_features_for_model(features):
     
     # Mapeo para servicio de internet
     internet_map = {
-        'DSL': 0,
-        'Fiber optic': 1,
-        'No': 2
+        'DSL': 1,
+        'Fiber optic': 2,
+        'No': 0
     }
     
     # Aplicar mapeos
@@ -91,7 +92,7 @@ def encode_features_for_model(features):
             encoded[col] = binary_map.get(encoded[col], 0)
     
     if 'internetservice' in encoded:
-        encoded['internetservice'] = internet_map.get(encoded['internetservice'], 2)
+        encoded['internetservice'] = internet_map.get(encoded['internetservice'], 0)
     
     if 'contract' in encoded:
         encoded['contract'] = contract_map.get(encoded['contract'], 0)
@@ -111,50 +112,14 @@ def encode_features_for_model(features):
 
 def predict_churn(features: dict):
     """
-    Predicción de churn con reglas simples
-    + integración del modelo de matrícula
+    Predicción de churn usando modelo ML + fallback con reglas
     """
     
-    # ========== PARTE 1: PREDICCIÓN CHURN ==========
-    tenure = features.get('tenure', 0)
-    monthly_charges = features.get('monthlycharges', 0)
-    contract = features.get('contract', 'Month-to-month')
-    
-    # Manejar valores NaN
-    if pd.isna(tenure):
-        tenure = 0
-    if pd.isna(monthly_charges):
-        monthly_charges = 0
-    if pd.isna(contract):
-        contract = 'Month-to-month'
-    
-    # Lógica simple de predicción
-    if contract == 'Month-to-month' and monthly_charges > 70:
-        prediction = 1
-        risk = "Alto"
-        reason = "Contrato mensual con cargo alto"
-    elif tenure < 12 and monthly_charges > 60:
-        prediction = 1
-        risk = "Medio-Alto"
-        reason = "Cliente nuevo con cargo elevado"
-    elif tenure < 6:
-        prediction = 1
-        risk = "Medio"
-        reason = "Cliente muy nuevo"
-    elif contract == 'Two year' and tenure > 24:
-        prediction = 0
-        risk = "Bajo"
-        reason = "Cliente con contrato largo y antigüedad"
-    else:
-        prediction = 0
-        risk = "Bajo"
-        reason = "Cliente estable"
-    
-    # ========== PARTE 2: PREDICCIÓN MATRÍCULA ==========
     try:
+        # ========== 1. INTENTAR CON MODELO ML ==========
         model = load_model()
         
-        # 🔥 CONVERTIR TEXTO A NÚMEROS ANTES DE PASAR AL MODELO 🔥
+        # Convertir texto a números
         features_encoded = encode_features_for_model(features.copy())
         
         # Preparar datos para el modelo
@@ -163,35 +128,97 @@ def predict_churn(features: dict):
         # Asegurar que todos los datos sean numéricos
         data = data.apply(pd.to_numeric, errors='coerce').fillna(0)
         
-        # Hacer predicción
-        pred_matricula = model.predict(data)[0]
+        # 🔥 PREDICCIÓN CON PROBABILIDADES 🔥
+        pred_churn = model.predict(data)[0]
         probs = model.predict_proba(data)[0]
         
-        matricula_pred = int(pred_matricula)
-        matricula_label = "SI" if matricula_pred == 1 else "NO"
-        prob_no = float(probs[0]) * 100  # Convertir a porcentaje
-        prob_si = float(probs[1]) * 100   # Convertir a porcentaje
+        # Verificar el orden de las clases
+        # Si classes_ = [0, 1] → probs[0] = NO, probs[1] = SI
+        prob_no = float(probs[0] * 100)  # Probabilidad de NO churn
+        prob_si = float(probs[1] * 100)   # Probabilidad de SI churn
+        
+        # Determinar nivel de riesgo
+        if prob_si > 70:
+            risk = "Alto"
+            reason = "Alta probabilidad de abandono"
+        elif prob_si > 40:
+            risk = "Medio"
+            reason = "Riesgo moderado de abandono"
+        else:
+            risk = "Bajo"
+            reason = "Cliente estable"
+        
+        churn_label = "Churn" if pred_churn == 1 else "No Churn"
+        
+        # ========== RESULTADO CON MODELO ==========
+        return {
+            "churn_prediction": int(pred_churn),
+            "churn_label": churn_label,
+            "risk_level": risk,
+            "churn_reason": reason,
+            "probability_no": round(prob_no, 2),
+            "probability_si": round(prob_si, 2),
+            "model_used": "ML"
+        }
         
     except Exception as e:
-        matricula_pred = None
-        matricula_label = "Error"
-        prob_no = None
-        prob_si = None
-        error_modelo = str(e)
-    
-    # ========== RESULTADO ==========
-    result = {
-        "churn_prediction": prediction,
-        "churn_label": "Churn" if prediction == 1 else "No Churn",
-        "risk_level": risk,
-        "churn_reason": reason,
-        "matricula_prediction": matricula_pred,
-        "matricula_label": matricula_label,
-        "probability_no": prob_no,
-        "probability_si": prob_si,
-    }
-    
-    if 'error_modelo' in locals():
-        result["error"] = error_modelo
-    
-    return result
+        # ========== 2. FALLBACK CON REGLAS MANUALES ==========
+        print(f"⚠️ Error en modelo ML, usando fallback: {e}")
+        
+        tenure = features.get('tenure', 0)
+        monthly_charges = features.get('monthlycharges', 0)
+        contract = features.get('contract', 'Month-to-month')
+        
+        # Manejar valores NaN
+        if pd.isna(tenure):
+            tenure = 0
+        if pd.isna(monthly_charges):
+            monthly_charges = 0
+        if pd.isna(contract):
+            contract = 'Month-to-month'
+        
+        # Lógica simple de predicción
+        if contract == 'Month-to-month' and monthly_charges > 70:
+            pred_churn = 1
+            risk = "Alto"
+            reason = "Contrato mensual con cargo alto"
+            prob_no = 20.0
+            prob_si = 80.0
+        elif tenure < 12 and monthly_charges > 60:
+            pred_churn = 1
+            risk = "Medio-Alto"
+            reason = "Cliente nuevo con cargo elevado"
+            prob_no = 35.0
+            prob_si = 65.0
+        elif tenure < 6:
+            pred_churn = 1
+            risk = "Medio"
+            reason = "Cliente muy nuevo"
+            prob_no = 45.0
+            prob_si = 55.0
+        elif contract == 'Two year' and tenure > 24:
+            pred_churn = 0
+            risk = "Bajo"
+            reason = "Cliente con contrato largo y antigüedad"
+            prob_no = 90.0
+            prob_si = 10.0
+        else:
+            pred_churn = 0
+            risk = "Bajo"
+            reason = "Cliente estable"
+            prob_no = 75.0
+            prob_si = 25.0
+        
+        churn_label = "Churn" if pred_churn == 1 else "No Churn"
+        
+        # ========== RESULTADO CON FALLBACK ==========
+        return {
+            "churn_prediction": int(pred_churn),
+            "churn_label": churn_label,
+            "risk_level": risk,
+            "churn_reason": reason,
+            "probability_no": prob_no,
+            "probability_si": prob_si,
+            "model_used": "Fallback (Reglas)",
+            "error": str(e)
+        }

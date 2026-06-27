@@ -3,10 +3,10 @@ import joblib
 import pandas as pd
 import numpy as np
 
-# ========== RUTAS DE MODELOS ==========
+
 MODEL_CHURN_PATH = Path("artifacts/predictor_matricula_tree.joblib")
 
-# ========== COLUMNAS DEL DATASET ==========
+
 FEATURE_COLUMNS = [
     "customerid",
     "gender",
@@ -30,22 +30,21 @@ FEATURE_COLUMNS = [
     "totalcharges"
 ]
 
-# ========== ESTADÍSTICAS EXACTAS DEL SCALER ==========
-# 🔥 ACTUALIZA ESTOS VALORES CON LOS QUE OBTENGAS DEL SCRIPT DE ARRIBA 🔥
+#Escalados para mostrar probabilidad
 SCALER_MEANS = {
-    'customerid': 3500.0,        # ← REEMPLAZA CON EL VALOR EXACTO
-    'seniorcitizen': 0.16,       # ← REEMPLAZA CON EL VALOR EXACTO
-    'tenure': 37.5,              # ← REEMPLAZA CON EL VALOR EXACTO
-    'monthlycharges': 64.8,      # ← REEMPLAZA CON EL VALOR EXACTO
-    'totalcharges': 2500.0       # ← REEMPLAZA CON EL VALOR EXACTO
+    'customerid': 3500.0,        
+    'seniorcitizen': 0.16,     
+    'tenure': 37.5,             
+    'monthlycharges': 64.8,     
+    'totalcharges': 2500.0      
 }
 
 SCALER_STDS = {
-    'customerid': 2000.0,        # ← REEMPLAZA CON EL VALOR EXACTO
-    'seniorcitizen': 0.37,       # ← REEMPLAZA CON EL VALOR EXACTO
-    'tenure': 24.5,              # ← REEMPLAZA CON EL VALOR EXACTO
-    'monthlycharges': 30.0,      # ← REEMPLAZA CON EL VALOR EXACTO
-    'totalcharges': 1800.0       # ← REEMPLAZA CON EL VALOR EXACTO
+    'customerid': 2000.0,        
+    'seniorcitizen': 0.37,          
+    'tenure': 24.5,             
+    'monthlycharges': 30.0,      
+    'totalcharges': 1800.0       
 }
 
 NUMERIC_COLS_TO_SCALE = ['customerid', 'seniorcitizen', 'tenure', 'monthlycharges', 'totalcharges']
@@ -57,9 +56,7 @@ def load_model():
     return joblib.load(MODEL_CHURN_PATH)
 
 def encode_features_for_model(features):
-    """
-    🔥 CONVIERTE STRINGS A NÚMEROS 🔥
-    """
+
     encoded = features.copy()
     
     # Mapeo para variables binarias (Sí/No)
@@ -145,9 +142,7 @@ def encode_features_for_model(features):
     return encoded
 
 def scale_features(features):
-    """
-    🔥 ESCALA LAS CARACTERÍSTICAS NUMÉRICAS 🔥
-    """
+
     scaled = features.copy()
     
     for col in NUMERIC_COLS_TO_SCALE:
@@ -167,26 +162,21 @@ def predict_churn(features: dict):
     """
     
     try:
-        # ========== 1. CARGAR MODELO ==========
         model = load_model()
         
-        # ========== 2. CONVERTIR STRINGS A NÚMEROS ==========
         features_encoded = encode_features_for_model(features.copy())
         
-        # ========== 3. APLICAR SCALER ==========
         features_scaled = scale_features(features_encoded)
         
-        # ========== 4. PREPARAR DATOS PARA EL MODELO ==========
         data = pd.DataFrame([features_scaled], columns=FEATURE_COLUMNS)
         data = data.apply(pd.to_numeric, errors='coerce').fillna(0)
         
-        # ========== 5. PREDECIR CON PROBABILIDADES REALES ==========
         pred_churn = model.predict(data)[0]
         probs = model.predict_proba(data)[0]
         
         # Obtener probabilidades reales (NO FORZADAS)
-        prob_no = float(probs[0] * 100)  # Probabilidad de NO churn
-        prob_si = float(probs[1] * 100)  # Probabilidad de SI churn
+        prob_no = float(probs[0] * 100)  
+        prob_si = float(probs[1] * 100)  
         
         # Determinar nivel de riesgo basado en probabilidad real
         if prob_si > 70:
@@ -201,7 +191,6 @@ def predict_churn(features: dict):
         
         churn_label = "Churn" if pred_churn == 1 else "No Churn"
         
-        # ========== RESULTADO CON PROBABILIDADES REALES ==========
         return {
             "churn_prediction": int(pred_churn),
             "churn_label": churn_label,
@@ -213,8 +202,7 @@ def predict_churn(features: dict):
         }
         
     except Exception as e:
-        # ========== FALLBACK CON REGLAS ==========
-        print(f"⚠️ Error en modelo ML, usando fallback: {e}")
+        print(f"Error en modelo ML, usando fallback: {e}")
         
         tenure = features.get('tenure', 0)
         monthly_charges = features.get('monthlycharges', 0)
